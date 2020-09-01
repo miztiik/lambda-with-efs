@@ -61,11 +61,12 @@ def get_messages():
     return msg
 
 
-def add_message(new_message):
-    with open(MSG_FILE_PATH, "a") as msg_file:
-        fcntl.flock(msg_file, fcntl.LOCK_EX)
-        msg_file.write(new_message + "\n")
-        fcntl.flock(msg_file, fcntl.LOCK_UN)
+def add_message(_msg):
+    if _msg:
+        with open(MSG_FILE_PATH, "a") as msg_file:
+            fcntl.flock(msg_file, fcntl.LOCK_EX)
+            msg_file.write(_msg + "\n")
+            fcntl.flock(msg_file, fcntl.LOCK_UN)
 
 
 def delete_messages():
@@ -83,9 +84,8 @@ def lambda_handler(event, context):
     method = event["requestContext"]["httpMethod"]
     if method == "GET":
         greet_msg = get_messages()
-        print("working")
     elif method == "POST":
-        new_message = event["body"]
+        new_message = event.get("body")
         add_message(new_message)
         greet_msg = get_messages()
     elif method == "DELETE":
