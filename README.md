@@ -1,16 +1,16 @@
-# EFS Best Practices: Performance Testing Amazon EFS
+# Lambda Best Practices: Persistent Storage for functions
 
-Mystique Unicorn App is a building new application based on microservice architectural pattern. The developers intend to create several deployment environments such as `dev`, `test` or `prod` to maintain the pace of development.
+Mystique Unicorn App is a building new application based on microservice architectural pattern. One of their microservices need to have access to a persistent storage layer.
 
-The dev's are interested in having the ability to change the backend without any changes to the front-end. For example, The users should be sent to a different database from the Lambda function or trigger a completely different Lambda function or may get access some specific features in the app without having to do anything from their side.
+They have created this use-case as an analogy to explain their requirement. Let us say, we have a "Message Board", where any user can post messages and read messages of other users. This means, we need to store the messages from all the functions and generate be able to list/view of the messages. _Ofcourse, we can use a database, but that is not the point there, "How can we use a persistent storage to share data among functions?"_
 
 Can you help them do that in Amazon API Gateway & AWS Lambda?
 
 ## 🎯Solutions
 
-We can do this by using API Gateway stage variables ([ReST API][8] & [HTTP API][9]) and Lambda function [alias](https://docs.aws.amazon.com/lambda/latest/dg/configuration-aliases.html) without creating environment-wise redundant Lambda functions. In short, different Lambda alias, like `TEST` and `PROD` can be used as two different deployment targets for the Lambda function. When it comes to API Gateway, the [AWS Best Practice][10] here is to use different accounts or independant deployments of APIs for multiple environment like `dev`, `test` or `prod`.
+We can use AWS Elastic File System with AWS Lambda to achieve this.
 
-![Miztiik Automation API Best Practices: Highly Performant Design - API Keys | Rate Limiting with Usage Plan](images/miztiik_api_with_stage_variables_architecture.png)
+![Miztiik Automation Lambda Best Practices: Persistent Storage for functions](images/miztiik_api_lambda_with_efs_architecture.png)
 
 In this article, we will build an architecture, similar to the one shown above - A simple API using API Gateway which will trigger a Lambda function. We will have an stageVariable `lambdaAlias` and lets assume it is going to be an `prod` environment. The lambda will have multiple alias point at different stage of development. `prod` pointing to the most stable version and `dev` pointing to the bleeding edlge version.
 
@@ -61,138 +61,78 @@ Depending on the `lambdaAlias` value in API Gateway and Lambda `alias` pointer, 
     You should see an output of the available stacks,
 
     ```bash
-    anti-pattern-api
-    well-architected-api
+    vpc-stack
+    efs-stack
+    lambda-with-efs
     ```
 
 1.  ## 🚀 Deploying the application
 
     Let us walk through each of the stacks,
 
-    - **Stack: anti-pattern-api**
-      We are going to deploy a simple api running as a lambda function. This API is deployed as public endpoint without any `stageVariables` or lambda `alias`. When the api is invoked, The backend returns a greeting message with along an timestamp
+    - **Stack: efs-stack**
+      This stack will create the Amazon EFS. There are few resources that are prerequisites to create the EFS share. This stack will create the following resources,
+
+      - A VPC to host our EFS share - _Deployed by the dependant stack `vpc-stack`_
+      - Security group for our EFS share allowing inbound `TCP` on ort `2049` from our VPC IP range
+      - Posix user & acl `1000` - _In case you want to use OS level access restrictions, these will come in handy_
+      - EFS Access Point to make it easier to mount to Lambda and apply resource level access restrictions
+        - The default path for the access point is set to `/efs`
 
       Initiate the deployment with the following command,
 
       ```bash
-      cdk deploy anti-pattern-api
+      cdk deploy efs-stack
       ```
 
-      _Expected output:_
-      The `AntiPatternApiUrl` can be found in the outputs section of the stack,
+    - **Stack: lambda-with-efs**
 
-      ```bash
-      $ ANTI_PATTERN_API_URL="https://c4o9bm2qwj.execute-api.us-east-1.amazonaws.com/prod/anti-pattern-api/greeter"
-      $ curl ${ANTI_PATTERN_API_URL}
-      {
-        "message": "Hello from Miztiikal World, How is it going?",
-        "api_stage": "NO-STAGE-VARIABLE-DEFINED",
-        "lambda_version": "$LATEST",
-        "ts": "2020-08-26 17:07:27.707655"
-      }
-      ```
-
-      Here you can observe that lambda version is pointing to the `$LATEST` alias.
-
-    - **Stack: well-architected-api**
-
-      This stack:_well-architected-api_ is very much similar to the previous stack. In addition to that, We will also add an stage variable called `lambdaAlias` and set the value of that variable to `prod`. In addition to that, We will enable version and alias in greeter lambda function. The stack should create two aliases:
-
-      - `dev` - Pointing to the `$LATEST` version
-      - `prod` - Pointing to a unique idempotent version
+      This stack: _lambda-with-efs_ creates an REST API with a lambda backend. This lambda function will be deployed in the same VPC as our EFS share and use the same security group(_TODO: Host lambda in a independant security group_). The stack mounts the EFS Access point to our lambda function, there-by enabling us to read and write to our EFS share.
 
       Initiate the deployment with the following command,
 
       ```bash
-      cdk deploy well-architected-api
+      cdk deploy lambda-with-efs
       ```
 
-      Check the `Outputs` section of the stack to access the `WellArchitectedApiUrl`
+      Check the `Outputs` section of the stack to access the `GreetingsWallApiUrl`
 
 1.  ## 🔬 Testing the solution
 
-    We can use a tool like `curl` or `Postman` to query the urls. The _Outputs_ section of the respective stacks has the required information on the urls.
+    We can use a tool like `curl` or `Postman` to query the url. The _Outputs_ section of the respective stacks has the required information on the urls.
 
     ```bash
-    $ WELL_ARCHICTED_API_URL="https://r4e3y68p11.execute-api.us-east-1.amazonaws.com/prod/well-architected-api/greeter"
-    $ curl ${WELL_ARCHICTED_API_URL}
-    {
-      "message": "Hello from Miztiikal World, How is it going?",
-      "api_stage": "prod",
-      "lambda_version": "38",
-      "ts": "2020-08-26 13:03:19.810150"
-    }
+    $ GREETINGS_WALL_URL="https://2s9p0x3p53.execute-api.us-east-2.amazonaws.com/prod/lambda-with-efs/greeter"
+    $ curl ${GREETINGS_WALL_URL}
+    No message yet.
+    $ curl -X POST -H "Content-Type: text/plain" -d 'Hello from EFS!' ${GREETINGS_WALL_URL}
+    Hello from EFS!
+
+    $ curl -X POST -H "Content-Type: text/plain" -d 'Hello again :)' ${GREETINGS_WALL_URL}
+    Hello from EFS!
+    Hello again :)
+
+    $ curl ${GREETINGS_WALL_URL}
+    Hello from EFS!
+    Hello again :)
+
+    $ curl -X DELETE ${GREETINGS_WALL_URL}
+    Messages deleted.
+
+    $ curl ${GREETINGS_WALL_URL}
+    No message yet.
     ```
 
-    We can observe that the api is invoking a specific version of lambda: `38` to be specific. Your `lambda_version` number could be different from what is shown here. Let us make some changes to the lambda code and then test again.
-
-    - Navigate to the `greeter_fn_well-architected-api` in the Lambda console
-    - From **Qualifiers** > Select **Version** > Select **\$LATEST**
-    - To make it easier to edit the code, without breaking anything else, Lets update the `greetings_msg` variable. This should be around line _46_.
-
-      Change from this,
-
-      ```bash
-      greetings_msg = "Hello from Miztiikal World, How is it going?"
-      # greetings_msg = "Hello from Modernized Miztiikal World, How is it going?"
-      ```
-
-      to this,
-
-      ```bash
-      # greetings_msg = "Hello from Miztiikal World, How is it going?"
-      greetings_msg = "Hello from Modernized Miztiikal World, How is it going?"
-      ```
-
-    - **Save** the function
-    - From **Actions** > Select **Publish new version** > Write a friendly description and Choose **Publish**
-      and point the alias to the new version
-
-    Now we have our shiny new update function, let us promote `prod` alias to this updated version
-
-    - From **Qualifiers** > Select **Alias** (_If you see versions, then choose **Alias**_) > Select **prod**
-    - Scroll to _Alias Configuration_ > Choose **Edit**
-    - Select the newest version(_for example `39`_) > Select **Save**
-      - Leave _Weighted Alias_ at defaults
-
-    ```bash
-    $ curl ${WELL_ARCHICTED_API_URL}
-    {
-      "message": "Hello from Modernized Miztiikal World, How is it going?",
-      "api_stage": "prod",
-      "lambda_version": "39",
-      "ts": "2020-08-27 13:03:19.810150"
-    }
-    ```
-
-    You should be able observe that the `lambda_version` is updated with the newer version and also the `message` is changed.
-
-    _Additional Learnings:_ You can check the logs in cloudwatch for more information or increase the logging level of the lambda functions by changing the environment variable from `INFO` to `DEBUG`
+    You should be able observe that we were able to read, write & delete data from the EFS share.
 
 1.  ## 📒 Conclusion
 
-    Here we have demonstrated how to use API Gateway stage variables and lambda alias to release changes to your backend without impacting your frontend. Here are some **AWS Lambda Versioning Strategies** that can used in your projects,
+    Here we have demonstrated how to use EFS along with AWS Lambda to create a persistent storage for your functions. This can be really helpful in a variety of situations. For example,
 
-    - Do not use an unqualified ARN or `$LATEST` in production
-    - Never call specific versions in production front-ends. Use an unique alias for each production release
-      - `prod202008` or `prodDV1`
-    - Retire older unused endpoints by denying their access via AWS IAM Role policy.
+    - If you are running machine language inference, lambda internal storage and layers might not be enough to host all the dependant libraries. In those cases an external storage becomes a necessity.
+    - Another usecase is when you want to process really huge files - unpack/zip them. Then the extra scratch space offered EFS comes handy.
 
-      - For example, _DENY_ access to older alias
-
-      ```json
-      {
-        "Statement": [
-          {
-            "Effect": "Deny",
-            "Action": ["lambda:invokefunction"],
-            "Resource": [
-              "arn:aws:lambda:aws-region:acct-id:function:greeter_fn_well-architected-api:prod201004"
-            ]
-          }
-        ]
-      }
-      ```
+    If you know of other usecases for using EFS with lambda, do let me know.
 
 1)  ## 🧹 CleanUp
 
@@ -232,7 +172,13 @@ Thank you for your interest in contributing to our project. Whether it's a bug r
 
 1. [Developers guide to using Amazon EFS with Amazon ECS and AWS Fargate – Part 1][1]
 
-1. [Set stage variables using the Amazon API Gateway console][2]
+1. [AWS Blog][5] & [Use Lambda & EFS to process big files][2]
+
+1. [Use Lambda & EFS to Update Fargate Web Content][2]
+
+1. [Use Lambda & EFS I/O Performance][3]
+
+1. [Lambda & EFS to run ML Inference][4]
 
 ### 🏷️ Metadata
 
@@ -241,7 +187,10 @@ Thank you for your interest in contributing to our project. Whether it's a bug r
 ![miztiik-success-green](https://img.shields.io/badge/miztiik-success-green)
 
 [1]: https://aws.amazon.com/blogs/containers/developers-guide-to-using-amazon-efs-with-amazon-ecs-and-aws-fargate-part-1/
-[2]: https://docs.amazonaws.cn/en_us/apigateway/latest/developerguide/how-to-set-stage-variables-aws-console.html
+[2]: https://github.com/aws-samples/aws-lambda-efs-samples
+[3]: https://lumigo.io/blog/unlocking-more-serverless-use-cases-with-efs-and-lambda/
+[4]: https://aws.amazon.com/blogs/aws/new-a-shared-file-system-for-your-lambda-functions/
+[5]: https://aws.amazon.com/blogs/compute/using-amazon-efs-for-aws-lambda-in-your-serverless-applications/
 [100]: https://www.udemy.com/course/aws-cloud-security/?referralCode=B7F1B6C78B45ADAF77A9
 [101]: https://www.udemy.com/course/aws-cloud-security-proactive-way/?referralCode=71DC542AD4481309A441
 [102]: https://www.udemy.com/course/aws-cloud-development-kit-from-beginner-to-professional/?referralCode=E15D7FB64E417C547579

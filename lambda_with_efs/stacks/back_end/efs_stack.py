@@ -10,9 +10,9 @@ class GlobalArgs:
 
     OWNER = "MystiqueAutomation"
     ENVIRONMENT = "production"
-    REPO_NAME = "efs-io-performance"
+    REPO_NAME = "lambda-with-efs"
     SOURCE_INFO = f"https://github.com/miztiik/{REPO_NAME}"
-    VERSION = "2020_08_26"
+    VERSION = "2020_08_31"
     MIZTIIK_SUPPORT_EMAIL = ["mystique@example.com", ]
 
 
@@ -22,12 +22,13 @@ class EfsStack(core.Stack):
                  scope: core.Construct,
                  id: str,
                  vpc,
+                 efs_mnt_path: str = "/efs",
                  **kwargs
                  ) -> None:
         super().__init__(scope, id, **kwargs)
 
         # Create Security Group to connect to EFS
-        efs_sg = _ec2.SecurityGroup(
+        self.efs_sg = _ec2.SecurityGroup(
             self,
             id="efsSecurityGroup",
             vpc=vpc,
@@ -35,19 +36,19 @@ class EfsStack(core.Stack):
             description="Security Group to connect to EFS from the VPC"
         )
 
-        efs_sg.add_ingress_rule(
+        self.efs_sg.add_ingress_rule(
             peer=_ec2.Peer.ipv4(vpc.vpc_cidr_block),
             connection=_ec2.Port.tcp(2049),
             description="Allow EC2 instances within the same VPC to connect to EFS"
         )
 
         # Let us create the EFS Filesystem
-        self.efs_file_system = _efs.FileSystem(
+        self.efs_share = _efs.FileSystem(
             self,
             "elasticFileSystem",
             file_system_name=f"high-performance-storage",
             vpc=vpc,
-            security_group=efs_sg,
+            security_group=self.efs_sg,
             encrypted=False,
             lifecycle_policy=_efs.LifecyclePolicy.AFTER_7_DAYS,
             performance_mode=_efs.PerformanceMode.GENERAL_PURPOSE,
@@ -55,7 +56,28 @@ class EfsStack(core.Stack):
             removal_policy=core.RemovalPolicy.DESTROY
         )
 
+        # create efs acl
+        efs_acl = _efs.Acl(
+            owner_gid="1000",
+            owner_uid="1000",
+            permissions="0777"
+        )
 
+        # create efs posix user
+        efs_user = _efs.PosixUser(
+            gid="1000",
+            uid="1000"
+        )
+
+        # create efs access point
+        self.efs_ap = _efs.AccessPoint(
+            self,
+            "efsAccessPoint",
+            path=f"{efs_mnt_path}",
+            file_system=self.efs_share,
+            posix_user=efs_user,
+            create_acl=efs_acl
+        )
 
         ###########################################
         ################# OUTPUTS #################
@@ -70,6 +92,6 @@ class EfsStack(core.Stack):
         output_1 = core.CfnOutput(
             self,
             "MountEfs",
-            value=f"sudo mount -t efs -o tls {self.efs_file_system.file_system_id}:/ /mnt/efs ",
+            value=f"sudo mount -t efs -o tls {self.efs_share.file_system_id}:/ /mnt/efs ",
             description="Use this command to mount efs using efs helper utility at location /mnt/efs"
         )

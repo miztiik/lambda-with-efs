@@ -9,9 +9,9 @@ class GlobalArgs:
 
     OWNER = "MystiqueAutomation"
     ENVIRONMENT = "production"
-    REPO_NAME = "efs-io-performance"
+    REPO_NAME = "lambda-with-efs"
     SOURCE_INFO = f"https://github.com/miztiik/{REPO_NAME}"
-    VERSION = "2020_08_26"
+    VERSION = "2020_08_31"
     MIZTIIK_SUPPORT_EMAIL = ["mystique@example.com", ]
 
 
@@ -51,7 +51,6 @@ class VpcStack(core.Stack):
                     )
                 ]
             )
-
 
         output_0 = core.CfnOutput(
             self,

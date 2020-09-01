@@ -2,9 +2,9 @@
 
 from aws_cdk import core
 
-from lambda_with_efs.stacks.efs_stack import EfsStack
-from lambda_with_efs.stacks.vpc_stack import VpcStack
-from lambda_with_efs.stacks.efs_performance_tester_stack import EfsPerformanceTesterStack
+from lambda_with_efs.stacks.back_end.efs_stack import EfsStack
+from lambda_with_efs.stacks.back_end.vpc_stack import VpcStack
+from lambda_with_efs.stacks.back_end.lambda_with_efs_stack import LambdaWithEfsStack
 
 app = core.App()
 
@@ -20,28 +20,22 @@ efs_stack = EfsStack(
     app,
     "efs-stack",
     vpc=vpc_stack.vpc,
-    description="Mystique Automation: Deploy AWS Elastic File System Stack"
+    description="Miztiik Automation: Deploy AWS Elastic File System Stack"
 )
 
-# EFS Best Practices & Performance Testing Amazon EFS
-# lambda_with_efs = EfsIoPerformanceStack(
-#     app,
-#     "lambda-with-efs",
-#     stack_log_level="INFO",
-#     description="Miztiik Automation: EFS Best Practices & Performance Testing Amazon EFS"
-# )
-
-# Miztiik Automation: EFS Best Practices - Performance Testing Amazon EFS
-efs_performance_tester_stack = EfsPerformanceTesterStack(
+# Lambda with EFS for Video Processing
+lambda_with_efs = LambdaWithEfsStack(
     app,
-    "efs-performance-tester",
+    "lambda-with-efs",
     vpc=vpc_stack.vpc,
-    ec2_instance_type="t2.micro",
+    efs_sg=efs_stack.efs_sg,
+    efs_share=efs_stack.efs_share,
+    efs_ap=efs_stack.efs_ap,
     stack_log_level="INFO",
-    efs_id = efs_stack.efs_file_system.file_system_id,
-    # api_url=secure_api_with_throttling.api_url,
-    description="Miztiik Automation: EFS Best Practices - Performance Testing Amazon EFS"
+    back_end_api_name="well-architected-api",
+    description="Miztiik Automation: Lambda with EFS for Video Processing"
 )
+
 
 # Stack Level Tagging
 core.Tag.add(app, key="Owner",
