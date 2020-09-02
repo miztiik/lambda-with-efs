@@ -1,4 +1,4 @@
-# Lambda Best Practices: Persistent Storage for functions
+# Lambda Best Practices: EFS as Persistent Storage for functions
 
 Mystique Unicorn App is a building new application based on microservice architectural pattern. One of their microservices need to have access to a persistent storage layer.
 
