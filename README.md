@@ -12,9 +12,7 @@ We can use AWS Elastic File System with AWS Lambda to achieve this.
 
 ![Miztiik Automation Lambda Best Practices: Persistent Storage for functions](images/miztiik_api_lambda_with_efs_architecture.png)
 
-In this article, we will build an architecture, similar to the one shown above - A simple API using API Gateway which will trigger a Lambda function. We will have an stageVariable `lambdaAlias` and lets assume it is going to be an `prod` environment. The lambda will have multiple alias point at different stage of development. `prod` pointing to the most stable version and `dev` pointing to the bleeding edlge version.
-
-Depending on the `lambdaAlias` value in API Gateway and Lambda `alias` pointer, the response of the API will be different. The stacks are generated using [AWS Cloud Development Kit (CDK)][102]. The architecture has been designed in a modular way so that we c``an build them individually and integrate them together. The prerequisites to build this architecture are listed below
+In this article, we will build an architecture, similar to the one shown above - A simple `message wall` API using API Gateway and Lambda. Any `POST` message send to the api will be stored in the EFS share and any subsequent `GET` requests will return all the messages in the wall.
 
 1.  ## 🧰 Prerequisites
 
